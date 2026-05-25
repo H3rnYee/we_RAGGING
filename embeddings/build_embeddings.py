@@ -1,46 +1,29 @@
-import json
-import ollama
-import numpy as np
+from __future__ import annotations
+
 import faiss
+import numpy as np
 
-# Load prompts
-with open("./data/prompts.json", "r") as f:
-    prompts = json.load(f)
+from retriever.core import EMBEDDING_MODEL, INDEX_PATH, build_searchable_text, load_prompts
+from retriever.core import embed_text
 
-texts = []
 
-# Build searchable text
-for prompt in prompts:
-    combined_text = f"""
-    Prompt Type: {prompt.get('prompt_type', '')}
-    Tags: {' '.join(prompt.get('tags', []))}
-    Content: {prompt.get('content', '')}
-    """
+def main() -> None:
+    prompts = load_prompts()
+    embeddings = []
 
-    texts.append(combined_text)
+    for prompt in prompts:
+        text = build_searchable_text(prompt)
+        embeddings.append(embed_text(text, model=EMBEDDING_MODEL)[0])
 
-# Generate embeddings
-embeddings = []
+    embeddings_array = np.array(embeddings, dtype="float32")
+    dimension = embeddings_array.shape[1]
 
-for text in texts:
-    response = ollama.embeddings(
-        model='qwen3-embedding:0.6b',
-        prompt=text
-    )
+    index = faiss.IndexFlatL2(dimension)
+    index.add(embeddings_array)
+    faiss.write_index(index, str(INDEX_PATH))
 
-    embeddings.append(response['embedding'])
+    print(f"Embeddings + index saved to {INDEX_PATH}.")
 
-# Convert to numpy
-embeddings = np.array(embeddings).astype("float32")
 
-# Create FAISS index
-dimension = embeddings.shape[1]
-
-index = faiss.IndexFlatL2(dimension)
-
-index.add(embeddings)
-
-# Save index
-faiss.write_index(index, "./embeddings/faiss.index")
-
-print("Embeddings + index saved.")
+if __name__ == "__main__":
+    main()

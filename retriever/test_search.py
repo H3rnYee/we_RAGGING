@@ -1,34 +1,27 @@
-import json
-import ollama
-import numpy as np
-import faiss
+from __future__ import annotations
 
-# Load prompts
-with open("./data/prompts.json", "r") as f:
-    prompts = json.load(f)
+from retriever.core import search_prompts
 
-# Load FAISS index
-index = faiss.read_index("./embeddings/faiss.index")
 
-# User query
-query = input("Enter your prompt: ")
+def _parse_tags(raw_tags: str) -> list[str]:
+    return [tag.strip() for tag in raw_tags.split(",") if tag.strip()]
 
-# Embed query
-response = ollama.embeddings(
-    model='qwen3-embedding:0.6b',
-    prompt=query
-)
 
-query_embedding = np.array(
-    [response['embedding']]
-).astype("float32")
+def main() -> None:
+    query = input("Enter your prompt: ")
+    raw_tags = input("Boost tags (comma-separated, optional): ")
 
-# Search
-distances, indices = index.search(query_embedding, k=3)
+    print("\nRetrieved Prompt Strategies:\n")
+    for result in search_prompts(query, tags=_parse_tags(raw_tags), k=3):
+        prompt = result.prompt
+        print(
+            f"[{prompt.get('id', 'unknown')}] "
+            f"score={result.boosted_score:.3f} "
+            f"tag_boost={result.tag_score:.3f}"
+        )
+        print(prompt["content"])
+        print("-" * 50)
 
-# Print results
-print("\nRetrieved Prompt Strategies:\n")
 
-for idx in indices[0]:
-    print(prompts[idx]["content"])
-    print("-" * 50)
+if __name__ == "__main__":
+    main()
