@@ -15,7 +15,7 @@ def main() -> None:
     user_prompt = input("Enter your prompt: ")
     raw_tags = input("Boost tags (comma-separated, optional): ")
 
-    retrieved_results = search_prompts(user_prompt, tags=_parse_tags(raw_tags), k=5)
+    retrieved_results = search_prompts(user_prompt, tags=_parse_tags(raw_tags), k=3)
     retrieved_context = build_retrieved_context(retrieved_results)
     optimized_prompt = generate_optimized_prompt(
         user_prompt,

@@ -4,3 +4,7 @@ __pycache__/
 .venv/
 venv/
 .streamlit/secrets.toml
+temp.py
+test_set_optimized.csv
+test_set.csv
+.gitignore

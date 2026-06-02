@@ -16,6 +16,14 @@
     "content": "Do not invent APIs, libraries, or functions that do not exist."
   },
   {
+  "id": "avoid_generic_output",
+  "prompt_type": "guardrail",
+  "layer": "guardrail",
+  "priority": 95,
+  "tags": ["all"],
+  "content": "Avoid reusable generic checklists. Tailor every recommendation to the user's exact task, domain, and constraints."
+  },
+  {
     "id": "behavior_reasoning",
     "prompt_type": "planning",
     "layer": "behavior",
@@ -55,5 +63,13 @@
   "prompt_type": "anti_pattern",
   "tags": ["backend"],
   "content": "Vague requests like 'build me an API' often produce incomplete implementations due to missing requirements."
+},
+{
+  "id": "mvp_scope",
+  "prompt_type": "product_planning",
+  "layer": "task",
+  "priority": 85,
+  "tags": ["mvp", "demo", "product"],
+  "content": "For MVP requests: define scope, demo flow, must-haves, and success criteria."
 }
 ]
