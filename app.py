@@ -3,8 +3,13 @@ from __future__ import annotations
 import streamlit as st
 
 from optimizer.optimizer_prompt import optimizer_template
-from retriever.core import build_retrieved_context, generate_optimized_prompt, get_all_tags
+from retriever.core import (
+    build_retrieved_context,
+    stream_optimized_prompt,
+    get_all_tags,
+)
 from retriever.core import load_prompts, search_prompts
+from evaluation.scorer import score_optimization
 
 
 st.set_page_config(page_title="Prompt RAG Optimizer", layout="wide")
@@ -61,7 +66,9 @@ def main() -> None:
 
     retrieved_context = build_retrieved_context(results)
 
-    strategies_tab, optimized_tab = st.tabs(["Retrieved strategies", "Optimized prompt"])
+    strategies_tab, optimized_tab, eval_tab = st.tabs(
+        ["Retrieved strategies", "Optimized prompt", "Evaluation"]
+    )
 
     with strategies_tab:
         for result in results:
@@ -80,18 +87,60 @@ def main() -> None:
                 )
 
     with optimized_tab:
-        with st.spinner("Generating optimized prompt..."):
-            try:
-                optimized_prompt = generate_optimized_prompt(
-                    user_prompt,
-                    retrieved_context,
-                    optimizer_template,
-                )
-            except Exception as exc:
-                st.error(f"Optimization failed: {exc}")
-                st.stop()
+        try:
+            stream = stream_optimized_prompt(
+                user_prompt,
+                retrieved_context,
+                optimizer_template,
+            )
+            optimized_prompt = st.write_stream(stream)
+        except Exception as exc:
+            st.error(f"Optimization failed: {exc}")
+            st.stop()
 
-        st.text_area("Optimized prompt", optimized_prompt, height=360)
+        if optimized_prompt:
+            st.session_state["last_optimized"] = optimized_prompt
+            st.session_state["last_original"] = user_prompt
+
+    with eval_tab:
+        original = st.session_state.get("last_original", user_prompt)
+        optimized = st.session_state.get("last_optimized")
+
+        if not optimized:
+            st.info("Generate an optimized prompt first (Optimized prompt tab).")
+        else:
+            st.markdown("**Original**")
+            st.text(original)
+            st.markdown("**Optimized**")
+            st.text(optimized)
+
+            if st.button("Run evaluation", key="eval_btn"):
+                with st.spinner("Scoring..."):
+                    try:
+                        report = score_optimization(original, optimized)
+                    except Exception as exc:
+                        st.error(f"Evaluation failed: {exc}")
+                        st.stop()
+
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Specificity", f"{report['specificity']}/5")
+                col2.metric("Actionability", f"{report['actionability']}/5")
+                col3.metric("Faithfulness", f"{report['faithfulness']}/5")
+
+                st.metric(
+                    "Heuristic clarity delta",
+                    f"{report['heuristics']['clarity_delta']:+.1f}%",
+                    help="Change in average word length (proxy for precision vs. vagueness)",
+                )
+                st.metric(
+                    "Length ratio",
+                    f"{report['heuristics']['length_ratio']:.2f}×",
+                    help="Tokens in optimized prompt / tokens in original",
+                )
+
+                if report.get("reasoning"):
+                    with st.expander("Judge reasoning"):
+                        st.write(report["reasoning"])
 
 
 if __name__ == "__main__":

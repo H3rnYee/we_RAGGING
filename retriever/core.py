@@ -60,7 +60,9 @@ def build_searchable_text(prompt: dict) -> str:
 
 def embed_text(text: str, model: str = EMBEDDING_MODEL) -> np.ndarray:
     response = ollama.embeddings(model=model, prompt=text)
-    return np.array([response["embedding"]], dtype="float32")
+    vec = np.array([response["embedding"]], dtype="float32")
+    faiss.normalize_L2(vec)
+    return vec
 
 
 def _tag_boost(prompt: dict, query_tags: set[str], tag_weight: float) -> tuple[float, list[str]]:
@@ -99,7 +101,7 @@ def search_prompts(
             continue
 
         prompt = prompts[int(idx)]
-        similarity = 1 / (1 + float(distance))
+        similarity = float(distance)  # inner product == cosine similarity after L2 normalisation
         tag_score, matched_tags = _tag_boost(prompt, selected_tags, tag_weight)
         priority_score = float(prompt.get("priority", 0)) / 1000
         boosted_score = similarity + tag_score + priority_score
@@ -123,15 +125,38 @@ def build_retrieved_context(results: Iterable[SearchResult]) -> str:
     return "\n".join(f"- {result.prompt['content']}" for result in results)
 
 
+def _build_optimizer_message(
+    user_prompt: str,
+    retrieved_context: str,
+    optimizer_template: str,
+) -> list[dict]:
+    final_prompt = optimizer_template.format(
+        retrieved_context=retrieved_context,
+        user_prompt=user_prompt,
+    )
+    return [{"role": "user", "content": final_prompt}]
+
+
 def generate_optimized_prompt(
     user_prompt: str,
     retrieved_context: str,
     optimizer_template: str,
     model: str = CHAT_MODEL,
 ) -> str:
-    final_prompt = optimizer_template.format(
-        retrieved_context=retrieved_context,
-        user_prompt=user_prompt,
-    )
-    answer = ollama.chat(model=model, messages=[{"role": "user", "content": final_prompt}])
+    messages = _build_optimizer_message(user_prompt, retrieved_context, optimizer_template)
+    answer = ollama.chat(model=model, messages=messages)
     return answer["message"]["content"]
+
+
+def stream_optimized_prompt(
+    user_prompt: str,
+    retrieved_context: str,
+    optimizer_template: str,
+    model: str = CHAT_MODEL,
+):
+    """Yield text chunks as the model generates them."""
+    messages = _build_optimizer_message(user_prompt, retrieved_context, optimizer_template)
+    for chunk in ollama.chat(model=model, messages=messages, stream=True):
+        token = chunk["message"]["content"]
+        if token:
+            yield token
