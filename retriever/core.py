@@ -7,14 +7,34 @@ from typing import Iterable
 
 import faiss
 import numpy as np
-import ollama
+from groq import Groq
+from sentence_transformers import SentenceTransformer
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 PROMPTS_PATH = ROOT_DIR / "data" / "prompts.json"
 INDEX_PATH = ROOT_DIR / "embeddings" / "faiss.index"
-EMBEDDING_MODEL = "qwen3-embedding:0.6b"
-CHAT_MODEL = "qwen3:1.7b"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+CHAT_MODEL = "llama-3.1-8b-instant"
+
+_embedder: SentenceTransformer | None = None
+
+
+def _get_embedder() -> SentenceTransformer:
+    global _embedder
+    if _embedder is None:
+        _embedder = SentenceTransformer(EMBEDDING_MODEL)
+    return _embedder
+
+
+def _groq_client() -> Groq:
+    import os
+    import streamlit as st
+    api_key = (
+        st.secrets.get("GROQ_API_KEY")
+        or os.environ.get("GROQ_API_KEY")
+    )
+    return Groq(api_key=api_key)
 
 
 @dataclass(frozen=True)
@@ -59,10 +79,8 @@ def build_searchable_text(prompt: dict) -> str:
 
 
 def embed_text(text: str, model: str = EMBEDDING_MODEL) -> np.ndarray:
-    response = ollama.embeddings(model=model, prompt=text)
-    vec = np.array([response["embedding"]], dtype="float32")
-    faiss.normalize_L2(vec)
-    return vec
+    vec = _get_embedder().encode([text], normalize_embeddings=True).astype("float32")
+    return vec  # shape (1, dim), already L2-normalised
 
 
 def _tag_boost(prompt: dict, query_tags: set[str], tag_weight: float) -> tuple[float, list[str]]:
@@ -144,8 +162,8 @@ def generate_optimized_prompt(
     model: str = CHAT_MODEL,
 ) -> str:
     messages = _build_optimizer_message(user_prompt, retrieved_context, optimizer_template)
-    answer = ollama.chat(model=model, messages=messages)
-    return answer["message"]["content"]
+    response = _groq_client().chat.completions.create(model=model, messages=messages)
+    return response.choices[0].message.content
 
 
 def stream_optimized_prompt(
@@ -156,7 +174,8 @@ def stream_optimized_prompt(
 ):
     """Yield text chunks as the model generates them."""
     messages = _build_optimizer_message(user_prompt, retrieved_context, optimizer_template)
-    for chunk in ollama.chat(model=model, messages=messages, stream=True):
-        token = chunk["message"]["content"]
+    stream = _groq_client().chat.completions.create(model=model, messages=messages, stream=True)
+    for chunk in stream:
+        token = chunk.choices[0].delta.content or ""
         if token:
             yield token

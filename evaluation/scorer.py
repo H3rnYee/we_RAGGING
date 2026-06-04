@@ -3,9 +3,7 @@ from __future__ import annotations
 import json
 import re
 
-import ollama
-
-from retriever.core import CHAT_MODEL
+from retriever.core import CHAT_MODEL, _groq_client
 
 
 _JUDGE_PROMPT = """You are an impartial evaluator of prompt quality.
@@ -48,8 +46,10 @@ def score_optimization(
     model: str = CHAT_MODEL,
 ) -> dict:
     prompt = _JUDGE_PROMPT.format(original=original, optimized=optimized)
-    response = ollama.chat(model=model, messages=[{"role": "user", "content": prompt}])
-    raw = response["message"]["content"].strip()
+    response = _groq_client().chat.completions.create(
+        model=model, messages=[{"role": "user", "content": prompt}]
+    )
+    raw = response.choices[0].message.content.strip()
 
     # strip any accidental markdown fences
     raw = re.sub(r"^```[a-z]*\n?", "", raw)

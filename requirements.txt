@@ -1,4 +1,5 @@
 faiss-cpu
+groq
 numpy
-ollama
+sentence-transformers
 streamlit
