@@ -1,4 +1,6 @@
 faiss-cpu
 numpy
 ollama
+openai
+sentence-transformers
 streamlit
